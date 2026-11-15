@@ -1,0 +1,20 @@
+# Cloudflare Pages: fallback da SPA (React Router).
+#
+# NENHUMA regra ativa de propósito. Segundo a documentação do Pages ("Serving
+# Pages"), quando o projeto NÃO tem um 404.html na raiz, o Pages assume uma SPA e
+# serve a raiz (index.html) para qualquer caminho que não seja um arquivo estático.
+# É exatamente o que o React Router precisa (ex.: abrir /content-briefs direto).
+#
+# Não use `/* /index.html 200` aqui: a documentação de redirects do Pages avisa que
+# regras de redirect valem mesmo quando existe um arquivo estático no caminho, então
+# um catch-all `/*` pode reescrever /assets/*.js para o index.html e deixar a
+# página em branco.
+#
+# Regra de contingência (só se o fallback automático não funcionar no seu projeto;
+# teste abrindo uma rota profunda e conferindo /assets/ depois de ativar):
+#   /content-briefs  /index.html  200
+#   /content-briefs/*  /index.html  200
+#   /login  /index.html  200
+#   /no-permission  /index.html  200
+#
+# NÃO crie um 404.html em public/: isso desliga o modo SPA do Pages.

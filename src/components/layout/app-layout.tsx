@@ -8,14 +8,14 @@ import { formatLongDate } from '@/lib/date';
 /**
  * Layout das telas autenticadas.
  *
- * Sem sidebar: a aplicação é de uma tela só. Barra superior com logo, data de
- * hoje por extenso e menu da pessoa; abaixo, o conteúdo da rota num bloco
+ * Sem sidebar: a navegação fica no menu da pessoa (Pautas, Usuários). Barra
+ * superior com logo, data de hoje por extenso e esse menu; abaixo, o conteúdo da rota num bloco
  * centralizado de até 1120 px com gutter de 16 px.
  *
  * @returns A barra e a área da página (`Outlet`).
  */
 export function AppLayout() {
-  const { name, roles, signOut } = useAuthContext();
+  const { name, role, signOut, hasPermission } = useAuthContext();
 
   return (
     <div className="mx-auto max-w-[1120px] px-4 pt-6 pb-12">
@@ -29,8 +29,10 @@ export function AppLayout() {
           </time>
           <UserMenu
             name={name}
-            roles={roles}
-            onSignOut={() => void signOut()}
+            userRole={role}
+            canReadContentBriefs={hasPermission('content-brief:read')}
+            canReadUsers={hasPermission('user:read')}
+            onSignOut={signOut}
           />
         </div>
       </header>

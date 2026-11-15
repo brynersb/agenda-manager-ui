@@ -20,13 +20,14 @@ function renderProtected(auth: Parameters<typeof renderWithProviders>[1]) {
       />
       <Route path="/login" element={<div>Tela de login</div>} />
       <Route path="/no-permission" element={<div>Sem acesso</div>} />
+      <Route path="/change-password" element={<div>Troca de senha</div>} />
     </Routes>,
     auth,
   );
 }
 
 describe('<ProtectedRoute />', () => {
-  it('mostra o carregando enquanto a sessão OIDC carrega', () => {
+  it('mostra o carregando enquanto a sessão guardada é restaurada', () => {
     renderProtected({ auth: { isLoading: true, isAuthenticated: false } });
 
     expect(screen.getByRole('status')).toBeInTheDocument();
@@ -52,7 +53,22 @@ describe('<ProtectedRoute />', () => {
     expect(screen.getByText('Sem acesso')).toBeInTheDocument();
   });
 
-  it('mostra a tela de recarregar, e não "sem permissão", quando /auth/user-info falha', () => {
+  it('manda para /change-password quem está com senha provisória, mesmo com permissões', () => {
+    renderProtected({
+      auth: { permissions: ['content-brief:read'], mustChangePassword: true },
+    });
+
+    expect(screen.getByText('Troca de senha')).toBeInTheDocument();
+    expect(screen.queryByText('Conteúdo protegido')).not.toBeInTheDocument();
+  });
+
+  it('a senha provisória vem antes do "sem permissão"', () => {
+    renderProtected({ auth: { permissions: [], mustChangePassword: true } });
+
+    expect(screen.getByText('Troca de senha')).toBeInTheDocument();
+  });
+
+  it('mostra a tela de recarregar, e não "sem permissão", quando a reconferência da sessão falha', () => {
     renderProtected({
       auth: { permissions: [], permissionsError: new Error('falhou') },
     });

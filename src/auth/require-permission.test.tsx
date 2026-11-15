@@ -46,4 +46,27 @@ describe('<RequirePermission />', () => {
 
     expect(screen.getByText('Sem acesso')).toBeInTheDocument();
   });
+
+  it('barra /users de quem não tem user:read e o leva à tela que lhe cabe', () => {
+    renderWithProviders(
+      <Routes>
+        <Route
+          path="/users"
+          element={
+            <RequirePermission permission="user:read">
+              <div>Lista de usuários</div>
+            </RequirePermission>
+          }
+        />
+        <Route path="/content-briefs" element={<div>Lista de pautas</div>} />
+      </Routes>,
+      {
+        auth: { permissions: ['content-brief:read', 'content-brief:write'] },
+        route: '/users',
+      },
+    );
+
+    expect(screen.queryByText('Lista de usuários')).not.toBeInTheDocument();
+    expect(screen.getByText('Lista de pautas')).toBeInTheDocument();
+  });
 });

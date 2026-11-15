@@ -1,10 +1,11 @@
 # Pauta de marketing Bora (UI)
 
 Front da "Pauta de marketing Bora", uma POC local. Já tem design system,
-autenticação (Keycloak), cliente HTTP, rotas, layout, painel de cadastros e a
-tela `/content-briefs` (lista por prazo, quadro por status, filtros e troca de status)
-com o editor de pauta e o painel de cadastros em modal (ou painel lateral, à
-escolha; ver "Aparência e formulários").
+autenticação própria da API (login por e-mail e senha), cliente HTTP, rotas,
+layout, painel de cadastros, a tela `/content-briefs` (lista por prazo, quadro
+por status, filtros e troca de status) com o editor de pauta e o painel de
+cadastros em modal (ou painel lateral, à escolha; ver "Aparência e
+formulários"), e a administração de usuários em `/users`.
 Filtros e visão ficam na URL; só visão e filtro rápido são lembrados em
 `localStorage`.
 
@@ -19,8 +20,8 @@ com alterações pede confirmação.
 
 - **React 19** + **TypeScript 6**, empacotados com **Vite 7**
 - **Tailwind CSS 4** (`@tailwindcss/vite`, tokens no `@theme` de `src/index.css`)
-- **react-router 8**, **TanStack Query 5**, **ky**, **react-oidc-context** +
-  **oidc-client-ts**
+- **react-router 8**, **TanStack Query 5**, **ky** (a autenticação é própria,
+  sem biblioteca de login externa)
 - **Radix UI** (dialog, dropdown-menu, popover, select, tooltip) e **lucide-react**
 - Fontes self-hosted via `@fontsource` (Schibsted Grotesk, Public Sans, IBM Plex Mono)
 - **Biome 2.5** para lint e formatação
@@ -42,21 +43,18 @@ cp .env.example .env
 npm run dev   # http://localhost:5173
 ```
 
-O login precisa do Keycloak local (porta 8080, realm `bora`) e da API (porta
-3000). Sem eles a tela de login abre, mas "Entrar" não conclui.
+O login precisa da API local (porta 3000, ADR-016). Em desenvolvimento, rode o
+`npm run seed:dev` da API para ter `dev.admin@pauta.local`,
+`dev.editor@pauta.local` e `dev.leitor@pauta.local` (a senha só de
+desenvolvimento está no README da API). Sem a API a tela de login abre, mas
+"Entrar" mostra o erro de conexão.
 
 ## Variáveis de ambiente
 
-Copie `.env.example` para `.env` (o `.env` não é versionado). Sem segredos: o
-client do Keycloak é público.
+Copie `.env.example` para `.env` (o `.env` não é versionado). Sem segredos.
 
 | Variável | Valor local |
 | --- | --- |
-| `VITE_OIDC_AUTHORITY` | `http://localhost:8080/realms/bora` |
-| `VITE_OIDC_CLIENT_ID` | `pauta-mkt-ui` |
-| `VITE_OIDC_REDIRECT_URI` | `http://localhost:5173/auth/callback` |
-| `VITE_OIDC_POST_LOGOUT_REDIRECT_URI` | `http://localhost:5173/login` |
-| `VITE_OIDC_SCOPE` | `openid profile email` |
 | `VITE_API_BASE_URL` | `http://localhost:3000/api/v1/` |
 
 Variáveis opcionais de aparência (valores aceitos e efeito em "Aparência e
@@ -100,29 +98,79 @@ Como alternar:
 
 ## Autenticação e autorização
 
-- **Login:** Authorization Code + PKCE (`react-oidc-context`). O front envia o
-  **access token**, nunca o id token. A sessão fica em `sessionStorage` (morre
-  ao fechar a aba); nenhum token vai para `localStorage` nem para log.
-- **Permissões:** vêm só de `GET /auth/user-info` (`permissions`). O front nunca
-  mapeia papel para permissão; telas e guardas usam
-  `useAuthContext().hasPermission(...)`. O papel do token (`realm_access.roles`)
-  só aparece como rótulo no menu antes de a API responder.
-- **Rotas:** `/login`, `/auth/callback`, `/no-permission` (públicas ou só com
-  sessão), `/` redireciona para `/content-briefs`, que exige `content-brief:read`. Quem não tem
-  nenhuma permissão vai para `/no-permission`; falha ao carregar
-  `/auth/user-info` mostra uma tela de recarregar, nunca "sem permissão".
-- **Erros 401 e 403:** no 401 o cliente renova o token (`signinSilent`) uma vez e
-  repete a chamada. Se o 401 persistir, a sessão é encerrada: `removeUser`,
-  cache limpo e `/login` (sem o `removeUser` haveria laço entre `/login` e a
-  rota protegida). O 403 vira `ForbiddenApiError` e não encerra a sessão.
+Contrato completo: `docs/auth.md` do repositório da API (ADR-016).
+
+- **Login:** e-mail e senha em `/login` (`POST /auth/login`). A sessão
+  `{ accessToken, refreshToken, expiresAt, user }` fica no `sessionStorage` (morre
+  ao fechar a aba); nenhum token vai para `localStorage` nem para log. Ao
+  recarregar, a sessão é restaurada e reconferida em `GET /auth/user-info`.
+- **Renovação:** o access token (15 min) é renovado cerca de 60 s antes de vencer
+  (com validade curta, 1/4 dela) e, num 401, uma única vez com repetição da
+  chamada. A renovação é em **voo único** (`src/auth/session-store.ts`): todas as
+  chamadas que precisam renovar ao mesmo tempo compartilham UMA ida a
+  `POST /auth/refresh`, porque o refresh token é de uso único e reapresentar um
+  já usado derruba a família de sessões. O refresh token novo é gravado antes de
+  liberar quem esperava. Se a API recusa o refresh (401/403), a sessão é
+  encerrada: storage e cache limpos e `/login` com o aviso "Sua sessão expirou".
+  Falha de rede ou 5xx na renovação **não** derruba a sessão (a chamada falha
+  com o erro de conexão e a renovação é tentada de novo).
+- **Sair:** `POST /auth/logout` com o refresh token (a falha é ignorada) e limpeza
+  total da sessão local, depois da confirmação do menu do usuário.
+- **Senha provisória:** com `mustChangePassword` (login, refresh ou sessão
+  guardada) ou um `403 PASSWORD_CHANGE_REQUIRED` em qualquer chamada, toda rota
+  protegida leva a `/change-password`, que mostra só o formulário (mínimo de 10
+  caracteres, igual à API) e sai pelo logout. A troca devolve uma **sessão nova**
+  que substitui a atual. "Alterar senha" no menu do usuário abre a mesma tela
+  para uso voluntário.
+- **Permissões:** vêm só de `user.permissions` da sessão (resposta da API); o
+  front nunca mapeia papel para permissão, só rotula o papel (Administrador,
+  Editor, Leitor). Telas e guardas usam `useAuthContext().hasPermission(...)`.
+- **Rotas:** `/login`, `/change-password` e `/no-permission` (públicas ou só com
+  sessão), `/` redireciona para `/content-briefs` (`content-brief:read`) e
+  `/users` exige `user:read`. Quem não tem nenhuma permissão vai para
+  `/no-permission`; falha ao reconferir a sessão ao carregar mostra uma tela de
+  recarregar, nunca "sem permissão".
+- **Erros 401 e 403:** o 403 comum vira `ForbiddenApiError` e não encerra a
+  sessão; `ACCOUNT_LOCKED`, `USER_DEACTIVATED` e `PASSWORD_CHANGE_REQUIRED` chegam
+  com o `code` (não são "sem permissão"). `401 INVALID_CREDENTIALS` do login não
+  dispara renovação.
 - **Mensagens de erro:** `getApiErrorMessage(error)` em `src/lib/api-error.ts`
   decide pelo `code` do corpo `{ statusCode, code, message, fields? }`, nunca
-  por regex no texto. Sem conexão: "Sem conexão com o servidor. Suas alterações
-  não foram salvas."
+  por regex no texto (só `ACCOUNT_LOCKED` e `WEAK_PASSWORD` mostram o texto da
+  API, que traz os minutos restantes e o motivo). Sem conexão: "Sem conexão com o
+  servidor. Suas alterações não foram salvas."
+- **Limite conhecido:** o `sessionStorage` é por aba, mas duplicar a aba copia a
+  sessão; as duas passam a compartilhar o mesmo refresh token e a primeira que
+  renovar derruba a outra (a API trata o reuso como roubo). Entre de novo na aba
+  derrubada.
 - **Testes:** `renderWithProviders` e `renderRoutes` (`src/test/`) montam
   TanStack Query e roteador em memória. Para simular a pessoa logada, o teste
   declara `vi.mock('@/auth/use-auth')` e passa `auth: { ... }` (valores padrão
-  de editor em `createAuthMock`).
+  de editor em `createAuthMock`). `src/auth/auth-flow.test.tsx` exercita os
+  fluxos reais (provedor, store, cliente HTTP e telas) só com o `fetch`
+  simulado; `src/test/users-fake.ts` é a API de usuários em memória.
+
+## Administração de usuários (`/users`)
+
+Acessível pelo menu do usuário, só com `user:read`.
+
+- **Lista:** busca por nome ou e-mail (`q`, com espera de 300 ms), filtro Todos /
+  Ativos / Desativados, tabela (nome, e-mail, papel, situação em pílula, último
+  acesso e "Bloqueado até" quando `lockedUntil` é futuro) paginada de 20 em 20,
+  com estados de carregando, vazio e erro. Em telas estreitas cada linha vira
+  um cartão. Sem `user:write` a página é só leitura.
+- **Com `user:write`:** **Novo usuário** (nome, e-mail, papel e senha opcional,
+  em modal ou painel lateral conforme a preferência), **Editar** (nome e papel,
+  com o `409 USER_VERSION_OUTDATED` tratado como nos outros editores: mantém o
+  texto e oferece "Ver versão atual"), **Desativar/Reativar** e **Redefinir
+  senha**, todos com confirmação.
+- **Senha provisória:** ao criar sem senha ou redefinir, a API devolve uma senha
+  provisória **uma única vez**. A tela a mostra num diálogo com botão de copiar e
+  o aviso de que não será mostrada de novo; clicar fora não fecha (Esc e
+  "Concluir" fecham) e ela some da memória ao fechar.
+- **Regras da API na tela:** a linha da própria pessoa só oferece "Editar" (nome;
+  o papel fica travado). `LAST_ADMIN` e `CANNOT_MODIFY_SELF` aparecem no modal de
+  confirmação ou no campo do papel; `EMAIL_ALREADY_REGISTERED` no campo de e-mail.
 
 ## Scripts
 
@@ -147,9 +195,10 @@ Como alternar:
 
 ## Modo demonstração
 
-`npm run demo:up` sobe Postgres, Keycloak, API e UI já buildados no Docker (UI em
-`http://localhost:5173`, Keycloak em `8081`, API em `3001`), com dados em volumes
-que sobrevivem a reinícios; `demo:backup`, `demo:restore` e `demo:reset` cuidam de
+`npm run demo:up` sobe a stack da demonstração já buildada no Docker (UI em
+`http://localhost:5173`, API em `3001`), com dados em volumes que sobrevivem a
+reinícios. A stack ainda está sendo ajustada à autenticação própria da API
+(ADR-016) em outra etapa, então confira `demo/` antes de depender dela; `demo:backup`, `demo:restore` e `demo:reset` cuidam de
 backup e recomeço. Pare o `npm run dev` antes (a porta 5173 é a mesma). Passo a
 passo, portas, usuários e o que apaga dados: [`docs/demo.md`](docs/demo.md).
 Roteiro para a usuária validar o sistema:

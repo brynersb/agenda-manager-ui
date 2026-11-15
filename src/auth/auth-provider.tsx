@@ -1,67 +1,151 @@
-import { WebStorageStateStore } from 'oidc-client-ts';
 import type { ReactNode } from 'react';
-import { useEffect } from 'react';
-import { AuthProvider as OidcAuthProvider, useAuth } from 'react-oidc-context';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 
-import { clearSession } from '@/lib/query-client';
+import {
+  changePassword,
+  login,
+  logout,
+  verifySession,
+} from '@/auth/auth-actions';
+import { AuthContext, type AuthContextValue } from '@/auth/auth-context';
+import {
+  getSession,
+  refreshSession,
+  subscribeSession,
+} from '@/auth/session-store';
+import type { Permission } from '@/types/auth';
+
+/** Espera antes de tentar de novo uma renovação que falhou por rede ou 5xx. */
+const REFRESH_RETRY_MS = 15_000;
+
+const EMPTY_PERMISSIONS: Permission[] = [];
 
 /**
- * Configuração do Authorization Code + PKCE contra o Keycloak.
- *
- * O `userStore` é `sessionStorage` de propósito: a sessão morre ao fechar a
- * aba, o que reduz a janela de exposição de um token roubado por XSS. Nenhum
- * token vai para `localStorage`. O `onSigninCallback` limpa `code`/`state` da
- * URL; sem isso o `StrictMode` processaria o callback duas vezes em dev.
+ * Etapas de abertura da página com uma sessão restaurada do `sessionStorage`:
+ * renovar o token já vencido, ou reconferir a identidade em `/auth/user-info`.
+ * Sem sessão guardada (ou depois de concluir), `ready`.
  */
-const oidcConfig = {
-  authority: import.meta.env.VITE_OIDC_AUTHORITY,
-  client_id: import.meta.env.VITE_OIDC_CLIENT_ID,
-  redirect_uri: import.meta.env.VITE_OIDC_REDIRECT_URI,
-  post_logout_redirect_uri: import.meta.env.VITE_OIDC_POST_LOGOUT_REDIRECT_URI,
-  scope: import.meta.env.VITE_OIDC_SCOPE,
-  response_type: 'code',
-  automaticSilentRenew: true,
-  userStore: new WebStorageStateStore({ store: window.sessionStorage }),
-  onSigninCallback: () => {
-    window.history.replaceState({}, document.title, window.location.pathname);
-  },
-};
+type Bootstrap =
+  | { phase: 'restoring' }
+  | { phase: 'verifying' }
+  | { phase: 'ready' }
+  | { phase: 'error'; error: Error };
 
-/**
- * Limpa o cache do TanStack Query quando a sessão termina, por logout
- * explícito ou forçado. Ouvir os eventos do `UserManager` cobre os dois
- * caminhos num lugar só.
- */
-function SessionCacheSync() {
-  const auth = useAuth();
-
-  useEffect(() => {
-    const handleSessionEnded = () => clearSession();
-
-    const unsubscribeUnloaded = auth.events.addUserUnloaded(handleSessionEnded);
-    const unsubscribeSignedOut =
-      auth.events.addUserSignedOut(handleSessionEnded);
-
-    return () => {
-      unsubscribeUnloaded();
-      unsubscribeSignedOut();
-    };
-  }, [auth.events]);
-
-  return null;
+function initialBootstrap(): Bootstrap {
+  const session = getSession();
+  if (!session) return { phase: 'ready' };
+  return Date.now() >= session.refreshAt
+    ? { phase: 'restoring' }
+    : { phase: 'verifying' };
 }
 
 /**
- * Provedor OIDC da aplicação, com a limpeza de cache ao fim da sessão.
+ * Provedor da autenticação própria da API (ADR-016).
+ *
+ * A sessão `{ accessToken, refreshToken, expiresAt, user }` vive no
+ * `sessionStorage` (morre ao fechar a aba) e é lida de `session-store`, que
+ * também faz a renovação em voo único. Este componente:
+ *
+ * - restaura a sessão ao carregar a página: renova o token se já passou da hora
+ *   de renovar; senão reconfere a identidade em `GET /auth/user-info`;
+ * - agenda a renovação do access token antes de ele vencer, para a pessoa nunca
+ *   sentir o vencimento;
+ * - entrega ao app identidade, permissões (as da sessão, sempre vindas da API)
+ *   e as ações de entrar, sair e trocar a senha.
  *
  * @param props.children Árvore que precisa de autenticação.
- * @returns A árvore dentro do contexto do `react-oidc-context`.
+ * @returns A árvore dentro do contexto de autenticação.
  */
 export function AuthProvider({ children }: { children: ReactNode }) {
-  return (
-    <OidcAuthProvider {...oidcConfig}>
-      <SessionCacheSync />
-      {children}
-    </OidcAuthProvider>
+  const session = useSyncExternalStore(subscribeSession, getSession);
+  const [bootstrap, setBootstrap] = useState<Bootstrap>(initialBootstrap);
+
+  useEffect(() => {
+    const restored = getSession();
+    if (!restored) {
+      setBootstrap({ phase: 'ready' });
+      return;
+    }
+
+    let cancelled = false;
+    const run = async () => {
+      try {
+        if (Date.now() >= restored.refreshAt) {
+          await refreshSession();
+        } else {
+          await verifySession();
+        }
+        if (!cancelled) setBootstrap({ phase: 'ready' });
+      } catch (error) {
+        if (cancelled) return;
+        // Um 401 sem saída já encerrou a sessão: o guarda leva a /login.
+        setBootstrap(
+          getSession()
+            ? {
+                phase: 'error',
+                error:
+                  error instanceof Error ? error : new Error(String(error)),
+              }
+            : { phase: 'ready' },
+        );
+      }
+    };
+    void run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const refreshAt = session?.refreshAt;
+  const hasSession = session !== null;
+
+  useEffect(() => {
+    if (!hasSession || refreshAt === undefined) return;
+
+    let timer: ReturnType<typeof setTimeout>;
+    const renew = () => {
+      refreshSession().catch(() => {
+        // Falha transitória (rede, 5xx): a sessão continua e tentamos de novo.
+        timer = setTimeout(renew, REFRESH_RETRY_MS);
+      });
+    };
+    timer = setTimeout(renew, Math.max(0, refreshAt - Date.now()));
+
+    return () => clearTimeout(timer);
+  }, [hasSession, refreshAt]);
+
+  const permissions = session?.user.permissions ?? EMPTY_PERMISSIONS;
+  const hasPermission = useCallback(
+    (permission: Permission) => permissions.includes(permission),
+    [permissions],
   );
+
+  const value = useMemo<AuthContextValue>(
+    () => ({
+      userId: session?.user.id ?? '',
+      email: session?.user.email ?? '',
+      name: session?.user.name ?? '',
+      role: session?.user.role ?? null,
+      permissions,
+      mustChangePassword: session?.mustChangePassword ?? false,
+      isAuthenticated: session !== null,
+      isLoading: bootstrap.phase === 'restoring',
+      isLoadingPermissions: bootstrap.phase === 'verifying',
+      permissionsError: bootstrap.phase === 'error' ? bootstrap.error : null,
+      signIn: login,
+      signOut: logout,
+      changePassword,
+      hasPermission,
+    }),
+    [session, permissions, bootstrap, hasPermission],
+  );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

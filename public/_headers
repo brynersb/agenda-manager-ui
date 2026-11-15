@@ -1,0 +1,24 @@
+# Cloudflare Pages: cabeçalhos de segurança, equivalentes ao nginx.conf.
+#
+# ATENÇÃO: troque https://SUA-API.onrender.com pela URL real da API (origem,
+# sem caminho) em `connect-src` antes de publicar. O arquivo é estático: não há
+# variável de ambiente aqui. Detalhes em pauta-mkt-planning/docs/deploy-nuvem-gratuita.md.
+#
+# `style-src 'unsafe-inline'` é necessário por causa do Radix UI (injeta <style>
+# em tempo de execução ao travar a rolagem). Scripts continuam só da própria origem.
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; connect-src 'self' https://SUA-API.onrender.com; object-src 'none'; base-uri 'self'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: DENY
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+
+# Nomes com hash do Vite: cache imutável por 1 ano.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# index.html (e as rotas da SPA, que caem nele) sem cache.
+/
+  Cache-Control: no-cache
+/index.html
+  Cache-Control: no-cache

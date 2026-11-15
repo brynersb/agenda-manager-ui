@@ -6,11 +6,34 @@ import type {
   DueStatus,
   QuickFilter,
 } from '@/types/content-brief';
+import type { UserStatus, UserStatusFilter } from '@/types/user';
 
-/** Rótulo em pt-BR de cada papel do realm, para o menu do usuário. */
+/** Papéis na ordem dos seletores (do mais ao menos privilegiado). */
+export const ROLE_ORDER: Role[] = [
+  'admin',
+  'content-brief-editor',
+  'content-brief-viewer',
+];
+
+/** Rótulo em pt-BR de cada papel, para o menu do usuário e a lista de usuários. */
 export const ROLE_LABEL: Record<Role, string> = {
+  admin: 'Administrador',
   'content-brief-editor': 'Editor',
   'content-brief-viewer': 'Leitor',
+};
+
+/** Filtros de situação da lista de usuários, na ordem do controle. */
+export const USER_STATUS_FILTERS: { value: UserStatusFilter; label: string }[] =
+  [
+    { value: 'ALL', label: 'Todos' },
+    { value: 'ACTIVE', label: 'Ativos' },
+    { value: 'DEACTIVATED', label: 'Desativados' },
+  ];
+
+/** Rótulo em pt-BR da situação de um usuário. */
+export const USER_STATUS_LABEL: Record<UserStatus, string> = {
+  ACTIVE: 'Ativo',
+  DEACTIVATED: 'Desativado',
 };
 
 /** Status na ordem do quadro e do seletor (a mesma do protótipo). */

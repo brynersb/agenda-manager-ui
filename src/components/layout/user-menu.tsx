@@ -1,6 +1,14 @@
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
-import { Check, ChevronDown, LogOut } from 'lucide-react';
+import {
+  Check,
+  ChevronDown,
+  ClipboardList,
+  KeyRound,
+  LogOut,
+  Users,
+} from 'lucide-react';
 import { useState } from 'react';
+import { useNavigate } from 'react-router';
 
 import { AvatarInitial } from '@/components/ui/avatar-initial';
 import { Button } from '@/components/ui/button';
@@ -27,28 +35,58 @@ const FORM_PRESENTATION_OPTIONS: { value: FormPresentation; label: string }[] =
 const RADIO_ITEM_CLASS =
   'flex cursor-pointer items-center justify-between gap-2 rounded-md px-2.5 py-2 text-sm outline-none data-[highlighted]:bg-hover';
 
+const ITEM_CLASS =
+  'flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-sm outline-none data-[highlighted]:bg-hover';
+
 interface UserMenuProps {
   name: string;
-  roles: readonly Role[];
-  onSignOut: () => void;
+  userRole: Role | null;
+  /** Mostra "Pautas" (`content-brief:read`). */
+  canReadContentBriefs?: boolean;
+  /** Mostra "Usuários" (`user:read`). */
+  canReadUsers?: boolean;
+  /** Encerra a sessão; o menu espera a promessa para mostrar o andamento. */
+  onSignOut: () => void | Promise<void>;
 }
 
 /**
- * Menu da pessoa logada: nome, papel, preferências de aparência (tema e forma
- * dos formulários) e "Sair" com confirmação.
+ * Menu da pessoa logada: nome, papel, atalhos de navegação (Pautas, Usuários,
+ * Alterar senha), preferências de aparência (tema e forma dos formulários) e
+ * "Sair" com confirmação.
  *
- * As escolhas de aparência valem na hora e ficam salvas neste navegador; o menu
- * continua aberto depois de escolher, para a pessoa ver o efeito.
+ * "Usuários" só aparece para quem tem `user:read`; quem decide é o chamador,
+ * com `hasPermission`. As escolhas de aparência valem na hora e ficam salvas
+ * neste navegador; o menu continua aberto depois de escolher, para a pessoa ver
+ * o efeito.
  *
  * @param props.name Nome exibido.
- * @param props.roles Papéis da pessoa; o rótulo mostra o primeiro.
+ * @param props.userRole Papel da pessoa, mostrado como rótulo.
+ * @param props.canReadContentBriefs Oferece o atalho para as pautas.
+ * @param props.canReadUsers Oferece o atalho para a administração de usuários.
  * @param props.onSignOut Executa o logout depois da confirmação.
  * @returns O gatilho do menu e o modal de confirmação.
  */
-export function UserMenu({ name, roles, onSignOut }: UserMenuProps) {
+export function UserMenu({
+  name,
+  userRole,
+  canReadContentBriefs = false,
+  canReadUsers = false,
+  onSignOut,
+}: UserMenuProps) {
   const [confirming, setConfirming] = useState(false);
-  const role = roles[0] ? ROLE_LABEL[roles[0]] : null;
+  const [signingOut, setSigningOut] = useState(false);
+  const roleLabel = userRole ? ROLE_LABEL[userRole] : null;
   const { appearance, setAppearance } = useAppearance();
+  const navigate = useNavigate();
+
+  async function handleSignOut() {
+    setSigningOut(true);
+    try {
+      await onSignOut();
+    } finally {
+      setSigningOut(false);
+    }
+  }
 
   return (
     <>
@@ -72,8 +110,36 @@ export function UserMenu({ name, roles, onSignOut }: UserMenuProps) {
           >
             <div className="px-2.5 py-2">
               <p className="m-0 font-semibold text-sm">{name}</p>
-              {role && <p className="m-0 text-muted text-xs">{role}</p>}
+              {roleLabel && (
+                <p className="m-0 text-muted text-xs">{roleLabel}</p>
+              )}
             </div>
+            <DropdownMenu.Separator className="my-1 h-px bg-line" />
+            {canReadContentBriefs && (
+              <DropdownMenu.Item
+                onSelect={() => navigate('/content-briefs')}
+                className={ITEM_CLASS}
+              >
+                <ClipboardList className="size-4" aria-hidden="true" />
+                Pautas
+              </DropdownMenu.Item>
+            )}
+            {canReadUsers && (
+              <DropdownMenu.Item
+                onSelect={() => navigate('/users')}
+                className={ITEM_CLASS}
+              >
+                <Users className="size-4" aria-hidden="true" />
+                Usuários
+              </DropdownMenu.Item>
+            )}
+            <DropdownMenu.Item
+              onSelect={() => navigate('/change-password')}
+              className={ITEM_CLASS}
+            >
+              <KeyRound className="size-4" aria-hidden="true" />
+              Alterar senha
+            </DropdownMenu.Item>
             <DropdownMenu.Separator className="my-1 h-px bg-line" />
             <DropdownMenu.Group>
               <DropdownMenu.Label className="px-2.5 pt-1.5 pb-1 font-medium text-muted text-xs">
@@ -137,7 +203,7 @@ export function UserMenu({ name, roles, onSignOut }: UserMenuProps) {
             <DropdownMenu.Separator className="my-1 h-px bg-line" />
             <DropdownMenu.Item
               onSelect={() => setConfirming(true)}
-              className="flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-sm outline-none data-[highlighted]:bg-hover"
+              className={ITEM_CLASS}
             >
               <LogOut className="size-4" aria-hidden="true" />
               Sair
@@ -148,15 +214,23 @@ export function UserMenu({ name, roles, onSignOut }: UserMenuProps) {
 
       <Modal
         open={confirming}
-        onOpenChange={setConfirming}
+        onOpenChange={(open) => {
+          if (!signingOut) setConfirming(open);
+        }}
         title="Sair da pauta?"
         description="Você precisará entrar de novo para ver ou editar as pautas."
         footer={
           <>
-            <Button variant="ghost" onClick={() => setConfirming(false)}>
+            <Button
+              variant="ghost"
+              disabled={signingOut}
+              onClick={() => setConfirming(false)}
+            >
               Cancelar
             </Button>
-            <Button onClick={onSignOut}>Sair</Button>
+            <Button loading={signingOut} onClick={() => void handleSignOut()}>
+              Sair
+            </Button>
           </>
         }
       />

@@ -43,7 +43,7 @@ describe('<AppLayout />', () => {
 
   it('mostra o nome e o papel "Editor" no menu do usuário', async () => {
     renderLayout({
-      auth: { name: 'Maria Souza', roles: ['content-brief-editor'] },
+      auth: { name: 'Maria Souza', role: 'content-brief-editor' },
     });
 
     await userEvent.click(
@@ -55,7 +55,7 @@ describe('<AppLayout />', () => {
   });
 
   it('mostra o papel "Leitor" para quem só lê', async () => {
-    renderLayout({ auth: { name: 'Leo', roles: ['content-brief-viewer'] } });
+    renderLayout({ auth: { name: 'Leo', role: 'content-brief-viewer' } });
 
     await userEvent.click(
       screen.getByRole('button', { name: 'Menu do usuário' }),

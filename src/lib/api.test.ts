@@ -192,4 +192,124 @@ describe('createApi', () => {
 
     expect(getApiErrorMessage(error)).toBe(OFFLINE_MESSAGE);
   });
+
+  it('devolve ACCOUNT_LOCKED com code e texto da API, sem virar "sem permissão"', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        jsonResponse(
+          {
+            statusCode: 403,
+            code: 'ACCOUNT_LOCKED',
+            message: 'Tente novamente em 9 minutos.',
+          },
+          403,
+        ),
+      ),
+    );
+
+    const error = await createApi(() => undefined)
+      .post('auth/login', { json: {} })
+      .catch((e: unknown) => e);
+
+    expect(error).not.toBeInstanceOf(ForbiddenApiError);
+    expect(isCode(error, 'ACCOUNT_LOCKED')).toBe(true);
+    expect(getApiErrorMessage(error)).toBe('Tente novamente em 9 minutos.');
+  });
+
+  it('401 INVALID_CREDENTIALS mantém o code e não conta como sessão expirada', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValue(
+          jsonResponse(
+            { statusCode: 401, code: 'INVALID_CREDENTIALS', message: 'x' },
+            401,
+          ),
+        ),
+    );
+    const onSessionExpired = vi.fn();
+    const renewToken = vi.fn();
+
+    const error = await createApi(() => undefined, {
+      onSessionExpired,
+      renewToken,
+    })
+      .post('auth/login', { json: {} })
+      .catch((e: unknown) => e);
+
+    expect(isCode(error, 'INVALID_CREDENTIALS')).toBe(true);
+    expect(onSessionExpired).not.toHaveBeenCalled();
+  });
+
+  it('403 PASSWORD_CHANGE_REQUIRED avisa o gancho, mantém o code e não encerra a sessão', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValue(
+          jsonResponse(
+            { statusCode: 403, code: 'PASSWORD_CHANGE_REQUIRED', message: 'x' },
+            403,
+          ),
+        ),
+    );
+    const onPasswordChangeRequired = vi.fn();
+    const onSessionExpired = vi.fn();
+
+    const error = await createApi(() => 'token', {
+      onPasswordChangeRequired,
+      onSessionExpired,
+    })
+      .get('content-briefs')
+      .catch((e: unknown) => e);
+
+    expect(isCode(error, 'PASSWORD_CHANGE_REQUIRED')).toBe(true);
+    expect(onPasswordChangeRequired).toHaveBeenCalledTimes(1);
+    expect(onSessionExpired).not.toHaveBeenCalled();
+  });
+
+  it('aceita um token assíncrono (renovado antes de enviar)', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(jsonResponse({ ok: true }));
+    vi.stubGlobal('fetch', mockFetch);
+
+    await createApi(async () => 'token-async')
+      .get('foo')
+      .json();
+
+    expect(
+      (mockFetch.mock.calls[0][0] as Request).headers.get('Authorization'),
+    ).toBe('Bearer token-async');
+  });
+
+  it('informa à renovação com que token a chamada falhou', async () => {
+    const mockFetch = vi
+      .fn()
+      .mockResolvedValueOnce(emptyResponse(401))
+      .mockResolvedValueOnce(jsonResponse({ ok: true }));
+    vi.stubGlobal('fetch', mockFetch);
+    const renewToken = vi.fn().mockResolvedValue('novo');
+
+    await createApi(() => 'o-que-falhou', { renewToken })
+      .get('foo')
+      .json();
+
+    expect(renewToken).toHaveBeenCalledWith('o-que-falhou');
+  });
+
+  it('falha transitória da renovação (rede) propaga o erro e não encerra a sessão', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(emptyResponse(401)));
+    const onSessionExpired = vi.fn();
+    const falha = new TypeError('Failed to fetch');
+
+    await expect(
+      createApi(() => 'token', {
+        renewToken: vi.fn().mockRejectedValue(falha),
+        onSessionExpired,
+      }).get('foo'),
+    ).rejects.toBe(falha);
+
+    expect(onSessionExpired).not.toHaveBeenCalled();
+  });
 });

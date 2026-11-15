@@ -6,6 +6,13 @@ import type { ApiErrorBody, FieldError } from '@/types/api';
 export const OFFLINE_MESSAGE =
   'Sem conexão com o servidor. Suas alterações não foram salvas.';
 
+/**
+ * Mensagem de falta de conexão para telas em que nada foi "salvo" (login e
+ * troca de senha), onde o texto de `OFFLINE_MESSAGE` não faz sentido.
+ */
+export const CONNECTION_MESSAGE =
+  'Sem conexão com o servidor. Verifique a internet e tente de novo.';
+
 /** Última rede de segurança: erro sem `code` conhecido nem `message` da API. */
 export const FALLBACK_MESSAGE = 'Não foi possível concluir. Tente de novo.';
 
@@ -21,6 +28,23 @@ export const CODE_MESSAGES = {
   INVALID_REQUEST: 'Confira os campos destacados e tente de novo.',
   INTERNAL_ERROR: 'Algo deu errado do nosso lado. Tente de novo em instantes.',
   TOO_MANY_REQUESTS: 'Muitas tentativas. Aguarde um instante.',
+  INVALID_CREDENTIALS: 'E-mail ou senha inválidos.',
+  INVALID_REFRESH_TOKEN: 'Sua sessão expirou. Entre de novo.',
+  ACCOUNT_LOCKED:
+    'Conta bloqueada por excesso de tentativas. Tente de novo em alguns minutos.',
+  USER_DEACTIVATED: 'Este usuário está desativado. Procure um administrador.',
+  PASSWORD_CHANGE_REQUIRED: 'Troque a senha provisória para continuar.',
+  INVALID_CURRENT_PASSWORD: 'A senha atual não confere.',
+  WEAK_PASSWORD: 'A senha deve ter entre 10 e 128 caracteres.',
+  INVALID_USER_NAME: 'Informe um nome com até 120 caracteres.',
+  USER_NOT_FOUND: 'Este usuário não foi encontrado. Atualize a página.',
+  EMAIL_ALREADY_REGISTERED: 'Já existe um usuário com este e-mail.',
+  USER_VERSION_OUTDATED:
+    'Este usuário foi alterado por outra pessoa. Recarregue para ver a versão atual.',
+  LAST_ADMIN:
+    'Esta operação deixaria o sistema sem administrador ativo. Cadastre ou reative outro administrador antes.',
+  CANNOT_MODIFY_SELF:
+    'Você não pode desativar nem alterar o papel da sua própria conta.',
   INVALID_REGISTRY_NAME: 'Informe um nome com até 80 caracteres.',
   INVALID_EMAIL: 'Informe um e-mail válido.',
   ESTATE_DEVELOPMENT_NOT_FOUND:
@@ -45,6 +69,17 @@ export const CODE_MESSAGES = {
   CONTENT_BRIEF_VERSION_OUTDATED:
     'Esta pauta foi alterada por outra pessoa. Recarregue para ver a versão atual.',
 } as const;
+
+/**
+ * Códigos cujo texto da API é mais específico que o do catálogo: o
+ * `ACCOUNT_LOCKED` traz os minutos que faltam e o `WEAK_PASSWORD` distingue
+ * "tamanho fora do limite" de "igual à senha atual". A decisão continua sendo
+ * pelo `code`; o texto só complementa quando a API o envia.
+ */
+const PREFER_API_MESSAGE: ReadonlySet<string> = new Set([
+  'ACCOUNT_LOCKED',
+  'WEAK_PASSWORD',
+]);
 
 /** Códigos de erro conhecidos pelo front. */
 export type ApiErrorCode = keyof typeof CODE_MESSAGES;
@@ -141,8 +176,9 @@ export function getErrorStatus(error: unknown): number | undefined {
 /**
  * Mensagem de erro para o usuário, decidida pelo `code` da API.
  *
- * Ordem: sem conexão; mapa `code → mensagem`; `message` da própria API (que já
- * vem em pt-BR); texto genérico.
+ * Ordem: sem conexão; `message` da API nos códigos de `PREFER_API_MESSAGE`;
+ * mapa `code → mensagem`; `message` da própria API (que já vem em pt-BR);
+ * texto genérico.
  *
  * @param error Erro da requisição.
  * @returns O texto em pt-BR a exibir.
@@ -153,6 +189,9 @@ export function getApiErrorMessage(error: unknown): string {
   const apiError = asApiError(error);
   if (!apiError) return FALLBACK_MESSAGE;
 
+  if (PREFER_API_MESSAGE.has(apiError.code) && apiError.message) {
+    return apiError.message;
+  }
   if (apiError.code in CODE_MESSAGES) {
     return CODE_MESSAGES[apiError.code as ApiErrorCode];
   }

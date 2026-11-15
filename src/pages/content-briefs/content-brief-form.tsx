@@ -1,4 +1,3 @@
-import { ChevronDown } from 'lucide-react';
 import type { FormEvent, RefObject } from 'react';
 import { useEffect } from 'react';
 
@@ -6,12 +5,9 @@ import {
   CreatableCombobox,
   type CreatableOption,
 } from '@/components/ui/creatable-combobox';
-import { Field, type FieldControlProps } from '@/components/ui/field';
-import {
-  CONTROL_CLASS,
-  FieldError,
-  INVALID_CONTROL_CLASS,
-} from '@/components/ui/field-error';
+import { Field } from '@/components/ui/field';
+import { FieldError } from '@/components/ui/field-error';
+import { NativeSelect, type SelectOption } from '@/components/ui/native-select';
 import { TextInput } from '@/components/ui/text-input';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -53,54 +49,6 @@ interface ContentBriefFormProps {
   titleRef: RefObject<HTMLInputElement | null>;
   /** Leva o foco ao título ao montar (pauta nova). */
   focusTitle?: boolean;
-}
-
-interface SelectOption {
-  value: string;
-  label: string;
-}
-
-interface NativeSelectProps {
-  control: FieldControlProps;
-  value: string;
-  onChange: (value: string) => void;
-  options: SelectOption[];
-  disabled: boolean;
-}
-
-/**
- * `<select>` nativo com o visual dos demais controles. Nativo de propósito:
- * aceita o valor vazio de "Sem ação"/"Nenhum" (o Radix Select não aceita) e dá
- * teclado e seletor de celular de graça.
- */
-function NativeSelect({
-  control,
-  value,
-  onChange,
-  options,
-  disabled,
-}: NativeSelectProps) {
-  return (
-    <div className="relative">
-      <select
-        {...control}
-        value={value}
-        disabled={disabled}
-        onChange={(e) => onChange(e.target.value)}
-        className={`h-[42px] cursor-pointer appearance-none pr-9 ${CONTROL_CLASS} ${control['aria-invalid'] ? INVALID_CONTROL_CLASS : 'border-line-strong'}`}
-      >
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-      <ChevronDown
-        className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-muted"
-        aria-hidden="true"
-      />
-    </div>
-  );
 }
 
 const ACTION_OPTIONS: SelectOption[] = [

@@ -1,10 +1,15 @@
-import { screen } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { Route, Routes, useLocation } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { APPEARANCE_KEY, readAppearance } from '@/hooks/use-preferences';
 import { renderWithProviders } from '@/test/render-with-providers';
 import { UserMenu } from './user-menu';
+
+function LocalizacaoAtual() {
+  return <p data-testid="local">{useLocation().pathname}</p>;
+}
 
 async function abrirMenu() {
   await userEvent.click(
@@ -22,7 +27,7 @@ describe('<UserMenu /> aparência', () => {
     return renderWithProviders(
       <UserMenu
         name="Maria"
-        roles={['content-brief-editor']}
+        userRole="content-brief-editor"
         onSignOut={vi.fn()}
       />,
     );
@@ -110,5 +115,105 @@ describe('<UserMenu /> aparência', () => {
     );
 
     expect(screen.getByRole('menu')).toBeInTheDocument();
+  });
+});
+
+describe('<UserMenu /> navegação e sessão', () => {
+  function montar(
+    props: Partial<Parameters<typeof UserMenu>[0]> = {},
+    route = '/content-briefs',
+  ) {
+    return renderWithProviders(
+      <>
+        <UserMenu
+          name="Maria"
+          userRole="admin"
+          onSignOut={vi.fn()}
+          {...props}
+        />
+        <Routes>
+          <Route path="*" element={<LocalizacaoAtual />} />
+        </Routes>
+      </>,
+      { route },
+    );
+  }
+
+  it('mostra o rótulo do papel de administrador', async () => {
+    montar();
+    await abrirMenu();
+
+    expect(await screen.findByText('Administrador')).toBeInTheDocument();
+  });
+
+  it('só oferece "Usuários" a quem tem user:read, e navega até a tela', async () => {
+    montar({ canReadUsers: true });
+    await abrirMenu();
+
+    await userEvent.click(
+      await screen.findByRole('menuitem', { name: 'Usuários' }),
+    );
+
+    expect(screen.getByTestId('local')).toHaveTextContent('/users');
+  });
+
+  it('esconde "Usuários" de quem não tem user:read', async () => {
+    montar({ canReadUsers: false, userRole: 'content-brief-editor' });
+    await abrirMenu();
+
+    await screen.findByRole('menuitem', { name: 'Alterar senha' });
+    expect(screen.queryByRole('menuitem', { name: 'Usuários' })).toBeNull();
+  });
+
+  it('oferece "Alterar senha" a todos e leva à tela de troca', async () => {
+    montar({ userRole: 'content-brief-viewer' });
+    await abrirMenu();
+
+    await userEvent.click(
+      await screen.findByRole('menuitem', { name: 'Alterar senha' }),
+    );
+
+    expect(screen.getByTestId('local')).toHaveTextContent('/change-password');
+  });
+
+  it('só oferece "Pautas" a quem pode ler pautas', async () => {
+    montar({ canReadContentBriefs: false });
+    await abrirMenu();
+
+    await screen.findByRole('menuitem', { name: 'Alterar senha' });
+    expect(screen.queryByRole('menuitem', { name: 'Pautas' })).toBeNull();
+  });
+
+  it('espera o logout terminar, mostrando o andamento no botão "Sair"', async () => {
+    let concluir: () => void = () => undefined;
+    const onSignOut = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          concluir = resolve;
+        }),
+    );
+    montar({ onSignOut });
+    await abrirMenu();
+    await userEvent.click(
+      await screen.findByRole('menuitem', { name: 'Sair' }),
+    );
+    const dialogo = await screen.findByRole('dialog', {
+      name: 'Sair da pauta?',
+    });
+
+    await userEvent.click(
+      within(dialogo).getByRole('button', { name: 'Sair' }),
+    );
+
+    expect(onSignOut).toHaveBeenCalledTimes(1);
+    expect(
+      within(dialogo).getByRole('button', { name: /Sair/ }),
+    ).toBeDisabled();
+    concluir();
+    await waitFor(() =>
+      expect(
+        within(dialogo).getByRole('button', { name: 'Sair' }),
+      ).toBeEnabled(),
+    );
   });
 });

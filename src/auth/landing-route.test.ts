@@ -16,4 +16,14 @@ describe('getLandingRoute', () => {
   it('leva para /no-permission quem só tem permissão que não abre tela', () => {
     expect(getLandingRoute(['registry:read'])).toBe('/no-permission');
   });
+
+  it('leva quem só administra usuários para /users', () => {
+    expect(getLandingRoute(['user:read', 'user:write'])).toBe('/users');
+  });
+
+  it('prefere as pautas quando a pessoa também administra usuários', () => {
+    expect(getLandingRoute(['user:read', 'content-brief:read'])).toBe(
+      '/content-briefs',
+    );
+  });
 });

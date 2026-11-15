@@ -15,7 +15,19 @@ Instruções para Claude Code ao trabalhar neste repositório (`pauta-mkt-ui`).
 - Cores só por token. **Nunca hex solto em componente**: o modo escuro depende
   disso. Hex só em `src/index.css`.
 - Permissões só de `useAuthContext().hasPermission(...)`. Nunca mapa
-  papel-permissão no front.
+  papel-permissão no front (o papel só vira rótulo em `lib/labels.ts`).
+- Autenticação própria da API (ADR-016; contrato em `docs/auth.md` do repo da
+  API). Sessão, renovação e fim de sessão vivem em `auth/session-store.ts`: a
+  renovação é em **voo único** (o refresh token é de uso único; chamar
+  `POST /auth/refresh` por fora, ou duas vezes ao mesmo tempo, derruba a família
+  de sessões). Chamadas autenticadas só por `useApi()`; login, logout e troca de
+  senha em `auth/auth-actions.ts`. Tokens só no `sessionStorage`, nunca em
+  `localStorage`, log ou URL. `mustChangePassword` (ou `403
+  PASSWORD_CHANGE_REQUIRED`) leva toda rota protegida a `/change-password`.
+  Senha provisória (`temporaryPassword`) é exibida uma única vez e não fica em
+  cache de mutação (`gcTime: 0`).
+- Prop de componente que guarda papel do usuário não se chama `role` (o Biome a
+  lê como papel ARIA): use `userRole`.
 - Erros de API: `getApiErrorMessage(error)` de `lib/api-error.ts`, decidido por
   `code`.
 - Estado de servidor só no TanStack Query; sem lib de estado nova. Formulário

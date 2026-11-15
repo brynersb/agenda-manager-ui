@@ -10,6 +10,11 @@ interface ModalProps {
   /** Ações (normalmente "Cancelar" e a ação principal). */
   footer?: ReactNode;
   children?: ReactNode;
+  /**
+   * `false` ignora o clique fora do diálogo (Esc e os botões continuam
+   * fechando). Para conteúdo que não se recupera, como a senha provisória.
+   */
+  dismissOnOutsideClick?: boolean;
 }
 
 /**
@@ -23,6 +28,7 @@ interface ModalProps {
  * @param props.description Texto explicativo.
  * @param props.footer Botões de ação.
  * @param props.children Conteúdo extra.
+ * @param props.dismissOnOutsideClick Se o clique fora fecha; padrão `true`.
  * @returns O modal.
  */
 export function Modal({
@@ -32,6 +38,7 @@ export function Modal({
   description,
   footer,
   children,
+  dismissOnOutsideClick = true,
 }: ModalProps) {
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -39,6 +46,9 @@ export function Modal({
         <Dialog.Overlay className="fixed inset-0 z-40 animate-overlay-in bg-scrim" />
         <Dialog.Content
           {...(description ? {} : { 'aria-describedby': undefined })}
+          onInteractOutside={
+            dismissOnOutsideClick ? undefined : (e) => e.preventDefault()
+          }
           className="fixed top-1/2 left-1/2 z-50 flex w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 animate-overlay-in flex-col gap-4 rounded-xl border border-line bg-surface p-6 text-ink shadow-float"
         >
           <Dialog.Title className="m-0 font-bold font-display text-xl leading-tight tracking-tight">

@@ -8,8 +8,12 @@ import {
   DUE_STATUS_LABEL,
   OPEN_DUE_STATUSES,
   QUICK_FILTERS,
+  ROLE_LABEL,
+  ROLE_ORDER,
   STATUS_LABEL,
   STATUS_ORDER,
+  USER_STATUS_FILTERS,
+  USER_STATUS_LABEL,
 } from './labels';
 
 describe('rótulos de pauta', () => {
@@ -65,6 +69,28 @@ describe('rótulos de pauta', () => {
       'Atrasadas',
       'Próximos 7 dias',
       'Concluídas',
+    ]);
+  });
+});
+
+describe('rótulos de usuário', () => {
+  it('rotula os três papéis, do mais ao menos privilegiado', () => {
+    expect(ROLE_ORDER.map((r) => ROLE_LABEL[r])).toEqual([
+      'Administrador',
+      'Editor',
+      'Leitor',
+    ]);
+  });
+
+  it('rotula a situação e oferece Todos, Ativos e Desativados', () => {
+    expect(USER_STATUS_LABEL).toEqual({
+      ACTIVE: 'Ativo',
+      DEACTIVATED: 'Desativado',
+    });
+    expect(USER_STATUS_FILTERS.map((f) => f.label)).toEqual([
+      'Todos',
+      'Ativos',
+      'Desativados',
     ]);
   });
 });

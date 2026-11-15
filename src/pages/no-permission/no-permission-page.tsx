@@ -13,7 +13,8 @@ import { Button } from '@/components/ui/button';
  * Tela para quem entrou mas ainda não tem acesso à pauta.
  *
  * Exige sessão; quem tem alguma permissão de entrada é levado para ela, para
- * que a tela não fique acessível por engano a quem tem acesso.
+ * que a tela não fique acessível por engano a quem tem acesso, e quem está com
+ * senha provisória vai trocá-la antes.
  *
  * @returns A mensagem com o botão "Sair", um redirecionamento ou um estado.
  */
@@ -21,6 +22,7 @@ export function NoPermissionPage() {
   const {
     isAuthenticated,
     isLoading,
+    mustChangePassword,
     permissions,
     isLoadingPermissions,
     permissionsError,
@@ -31,6 +33,7 @@ export function NoPermissionPage() {
   if (!isAuthenticated) return <Navigate to="/login" replace />;
   if (isLoadingPermissions) return <LoadingScreen />;
   if (permissionsError) return <PermissionsLoadError />;
+  if (mustChangePassword) return <Navigate to="/change-password" replace />;
 
   const landing = getLandingRoute(permissions);
   if (landing !== '/no-permission') return <Navigate to={landing} replace />;

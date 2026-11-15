@@ -12,3 +12,36 @@ export function formatLongDate(date: Date = new Date()): string {
     year: 'numeric',
   });
 }
+
+/**
+ * Data e hora curtas em pt-BR, como "14/11/2026 12:00", no fuso do navegador.
+ *
+ * @param iso Instante em ISO-8601 (UTC), como a API devolve.
+ * @returns O texto formatado; vazio se a data for inválida.
+ */
+export function formatDateTime(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+/**
+ * Hora curta em pt-BR, como "14:32", no fuso do navegador.
+ *
+ * @param iso Instante em ISO-8601 (UTC).
+ * @returns O texto formatado; vazio se a data for inválida.
+ */
+export function formatTime(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleTimeString('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}

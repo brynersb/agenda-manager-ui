@@ -13,7 +13,10 @@ import {
   toApiError,
 } from './api-error';
 
-/** Catálogo de `code` do plan técnico §5.6, escrito à mão para o teste. */
+/**
+ * Catálogo de `code` do plan técnico §5.6 e do `docs/auth.md` da API (seção 6),
+ * escrito à mão para o teste.
+ */
 const CATALOGO = [
   'UNAUTHENTICATED',
   'FORBIDDEN',
@@ -34,7 +37,23 @@ const CATALOGO = [
   'CONTENT_BRIEF_NOT_FOUND',
   'CONTENT_BRIEF_VERSION_OUTDATED',
   'TOO_MANY_REQUESTS',
+  'INVALID_CREDENTIALS',
+  'INVALID_REFRESH_TOKEN',
+  'ACCOUNT_LOCKED',
+  'USER_DEACTIVATED',
+  'PASSWORD_CHANGE_REQUIRED',
+  'INVALID_CURRENT_PASSWORD',
+  'WEAK_PASSWORD',
+  'INVALID_USER_NAME',
+  'USER_NOT_FOUND',
+  'EMAIL_ALREADY_REGISTERED',
+  'USER_VERSION_OUTDATED',
+  'LAST_ADMIN',
+  'CANNOT_MODIFY_SELF',
 ];
+
+/** Códigos em que a `message` da API complementa o catálogo (minutos, motivo). */
+const COM_TEXTO_DA_API = ['ACCOUNT_LOCKED', 'WEAK_PASSWORD'];
 
 function apiError(code: string, message = 'texto da api', status = 409) {
   return new ApiError({ status, code, message });
@@ -46,12 +65,41 @@ describe('getApiErrorMessage', () => {
   });
 
   it.each(
-    CATALOGO,
+    CATALOGO.filter((code) => !COM_TEXTO_DA_API.includes(code)),
   )('decide a mensagem pelo code %s, ignorando o texto da API', (code) => {
     const message = getApiErrorMessage(apiError(code, 'texto qualquer'));
 
     expect(message).toBe(CODE_MESSAGES[code as keyof typeof CODE_MESSAGES]);
     expect(message).not.toBe('texto qualquer');
+  });
+
+  it('mostra os minutos restantes que a API informa em ACCOUNT_LOCKED', () => {
+    const texto =
+      'Conta bloqueada por excesso de tentativas. Tente novamente em 10 minutos.';
+
+    expect(getApiErrorMessage(apiError('ACCOUNT_LOCKED', texto, 403))).toBe(
+      texto,
+    );
+  });
+
+  it('cai no catálogo em ACCOUNT_LOCKED e WEAK_PASSWORD quando a API não manda texto', () => {
+    for (const code of COM_TEXTO_DA_API) {
+      expect(getApiErrorMessage(apiError(code, '', 400))).toBe(
+        CODE_MESSAGES[code as keyof typeof CODE_MESSAGES],
+      );
+    }
+  });
+
+  it('distingue as duas causas de WEAK_PASSWORD pelo texto da API', () => {
+    expect(
+      getApiErrorMessage(
+        apiError(
+          'WEAK_PASSWORD',
+          'A nova senha deve ser diferente da atual.',
+          400,
+        ),
+      ),
+    ).toBe('A nova senha deve ser diferente da atual.');
   });
 
   it('usa a message da API quando o code não está no mapa', () => {

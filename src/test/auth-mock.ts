@@ -1,8 +1,6 @@
 import { vi } from 'vitest';
 
-import type { useAuthContext } from '@/auth/use-auth';
-
-type AuthContextValue = ReturnType<typeof useAuthContext>;
+import type { AuthContextValue } from '@/auth/auth-context';
 
 /**
  * Valor completo de `useAuthContext` para testes: pessoa autenticada com
@@ -26,17 +24,19 @@ export function createAuthMock(
   ];
 
   return {
-    sub: 'user-1',
+    userId: 'user-1',
     email: 'dev.editor@bora.test',
     name: 'Dev Editor',
-    roles: ['content-brief-editor'],
+    role: 'content-brief-editor',
     permissions,
+    mustChangePassword: false,
     isAuthenticated: true,
     isLoading: false,
     isLoadingPermissions: false,
     permissionsError: null,
     signIn: vi.fn().mockResolvedValue(undefined),
     signOut: vi.fn().mockResolvedValue(undefined),
+    changePassword: vi.fn().mockResolvedValue(undefined),
     hasPermission: (permission) => permissions.includes(permission),
     ...overrides,
   };

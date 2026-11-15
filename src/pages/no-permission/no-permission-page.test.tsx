@@ -14,6 +14,7 @@ function renderPagina(auth: Parameters<typeof renderWithProviders>[1]) {
       <Route path="/no-permission" element={<NoPermissionPage />} />
       <Route path="/login" element={<div>Tela de login</div>} />
       <Route path="/content-briefs" element={<div>Lista de pautas</div>} />
+      <Route path="/change-password" element={<div>Troca de senha</div>} />
     </Routes>,
     { ...auth, route: '/no-permission' },
   );
@@ -45,5 +46,11 @@ describe('<SemPermissaoPage />', () => {
     renderPagina({ auth: { permissions: ['content-brief:read'] } });
 
     expect(screen.getByText('Lista de pautas')).toBeInTheDocument();
+  });
+
+  it('manda para a troca de senha quem está com senha provisória', () => {
+    renderPagina({ auth: { permissions: [], mustChangePassword: true } });
+
+    expect(screen.getByText('Troca de senha')).toBeInTheDocument();
   });
 });
