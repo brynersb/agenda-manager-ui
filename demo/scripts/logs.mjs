@@ -1,5 +1,5 @@
 // demo:logs — segue os logs da API. Aceita outro serviço como argumento:
-//   npm run demo:logs -- keycloak
+//   npm run demo:logs -- postgres
 import { compose, ensureDocker, parseArgs } from './lib.mjs';
 
 const { rest } = parseArgs();

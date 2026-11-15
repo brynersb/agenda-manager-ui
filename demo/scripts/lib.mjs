@@ -3,9 +3,11 @@
 //
 // Segurança: todo comando do Docker passa por `compose()`, que fixa o projeto
 // `pauta-demo` e o arquivo da demonstração. Os contêineres e volumes da stack
-// de desenvolvimento (`pauta-mkt-postgres`, `pauta-mkt-keycloak`) nunca são
-// alcançados por aqui.
+// de desenvolvimento (`pauta-mkt-postgres`) nunca são alcançados por aqui.
 import { spawn } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
+import { existsSync } from 'node:fs';
+import { writeFile } from 'node:fs/promises';
 import { createConnection } from 'node:net';
 import path from 'node:path';
 import { createInterface } from 'node:readline/promises';
@@ -18,21 +20,88 @@ export const DEMO_DIR = path.resolve(
 export const BACKUPS_DIR = path.join(DEMO_DIR, 'backups');
 export const COMPOSE_FILE = path.join(DEMO_DIR, 'compose.demo.yaml');
 export const PROJECT_NAME = 'pauta-demo';
+/**
+ * Segredos da demonstração (JWT e senha do administrador inicial). Gerado pelo
+ * `demo:up` na primeira execução; fica fora do git e fora das imagens.
+ */
+export const ENV_FILE = path.join(DEMO_DIR, '.env');
+export const ADMIN_EMAIL = 'admin@pauta.local';
+/**
+ * Senha PÚBLICA de desenvolvimento dos usuários `dev.*@pauta.local` criados
+ * pelo seed da API (`seed:dev`). Não é segredo: está no `.env.example` da API.
+ */
+export const SEED_PASSWORD = 'dev-only-pauta-2026';
 
 export const URLS = {
   ui: 'http://localhost:5173',
-  keycloak: 'http://localhost:8081',
   api: 'http://localhost:3001',
 };
 export const PORTS = [
   { port: 5173, name: 'UI' },
-  { port: 8081, name: 'Keycloak' },
   { port: 3001, name: 'API' },
 ];
 
 /** Argumentos base do `docker compose` da demonstração. */
 function composeArgs(args) {
-  return ['compose', '-p', PROJECT_NAME, '-f', COMPOSE_FILE, ...args];
+  const envFile = existsSync(ENV_FILE) ? ['--env-file', ENV_FILE] : [];
+  return [
+    'compose',
+    '-p',
+    PROJECT_NAME,
+    '-f',
+    COMPOSE_FILE,
+    ...envFile,
+    ...args,
+  ];
+}
+
+/**
+ * Ambiente dos processos do Docker. Sem `demo/.env` (nada foi gerado ainda),
+ * o compose recusaria até `down` e `logs`, que pedem os segredos só para
+ * interpolar o arquivo; estes valores vazios de enchimento nunca chegam a uma
+ * API de verdade, pois o `demo:up` gera o `.env` antes de subir qualquer coisa.
+ */
+function composeEnvironment() {
+  if (existsSync(ENV_FILE)) {
+    return process.env;
+  }
+  return {
+    ...process.env,
+    JWT_SECRET: 'sem-uso-ainda-nao-gerado',
+    BOOTSTRAP_ADMIN_EMAIL: ADMIN_EMAIL,
+    BOOTSTRAP_ADMIN_PASSWORD: 'sem-uso-ainda-nao-gerado',
+  };
+}
+
+/**
+ * Cria o `demo/.env` se ainda não existir, com `JWT_SECRET` aleatório (48
+ * bytes) e uma senha aleatória para o administrador inicial. O arquivo é
+ * gravado com permissão 0600 e nunca sobrescrito (apagá-lo não muda a senha do
+ * admin já criado no banco: use `demo:reset`).
+ * @returns `true` se o arquivo foi criado agora.
+ */
+export async function ensureEnvFile() {
+  if (existsSync(ENV_FILE)) {
+    return false;
+  }
+  // base64url (A-Z a-z 0-9 - _): sem `$` nem aspas, que o compose
+  // interpretaria no `.env`.
+  const jwtSecret = randomBytes(48).toString('base64url');
+  const adminPassword = randomBytes(18).toString('base64url');
+  const content = `# Gerado por \`npm run demo:up\` em ${new Date().toISOString()}.
+# SOMENTE para a demonstração local. Fora do git; não compartilhe este arquivo.
+#
+# Segredo de assinatura dos tokens da API (trocar derruba as sessões abertas).
+JWT_SECRET=${jwtSecret}
+
+# Administrador inicial: criado só se o banco ainda não tem usuários. A senha
+# abaixo é PROVISÓRIA: o primeiro login exige trocá-la, e depois disso ela
+# deixa de valer (a senha nova fica só no banco, em hash).
+BOOTSTRAP_ADMIN_EMAIL=${ADMIN_EMAIL}
+BOOTSTRAP_ADMIN_PASSWORD=${adminPassword}
+`;
+  await writeFile(ENV_FILE, content, { mode: 0o600, flag: 'wx' });
+  return true;
 }
 
 /**
@@ -43,6 +112,7 @@ export function compose(args, options = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn('docker', composeArgs(args), {
       stdio: options.stdio ?? 'inherit',
+      env: composeEnvironment(),
     });
     child.on('error', reject);
     child.on('close', (code) => resolve(code ?? 1));
@@ -54,6 +124,7 @@ export function composeOutput(args) {
   return new Promise((resolve, reject) => {
     const child = spawn('docker', composeArgs(args), {
       stdio: ['ignore', 'pipe', 'pipe'],
+      env: composeEnvironment(),
     });
     let stdout = '';
     let stderr = '';
@@ -70,7 +141,10 @@ export function composeOutput(args) {
 
 /** Cria o processo `docker compose ...` com streams, para canalizar dados. */
 export function composeSpawn(args, stdio) {
-  return spawn('docker', composeArgs(args), { stdio });
+  return spawn('docker', composeArgs(args), {
+    stdio,
+    env: composeEnvironment(),
+  });
 }
 
 /** Resolve com o código de saída de um processo já criado. */
@@ -197,20 +271,30 @@ export function timestamp(date = new Date()) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}`;
 }
 
-/** Imprime onde acessar a demonstração e com quem entrar. */
+/**
+ * Imprime onde acessar a demonstração e onde está a credencial do
+ * administrador. A senha NÃO é impressa: fica só no `demo/.env` (0600), para
+ * não parar no histórico do terminal nem em logs.
+ */
 export function printAccessInfo() {
   console.log(`
 Demonstração no ar.
 
-  UI (aplicação):    ${URLS.ui}
-  Keycloak (login):  ${URLS.keycloak}   (console admin: admin / admin)
-  API (Swagger):     ${URLS.api}/docs
+  UI (aplicação):  ${URLS.ui}
+  API (Swagger):   ${URLS.api}/docs
 
-Usuários (senha: dev):
-  dev.editor   Ana Editora   edita pautas e cadastros
-  dev.leitor   Lucas Leitor  só leitura
+Administrador inicial:
+  e-mail:  ${ADMIN_EMAIL}
+  senha provisória: variável BOOTSTRAP_ADMIN_PASSWORD no arquivo
+    ${ENV_FILE}
+  (leia com: grep BOOTSTRAP_ADMIN_PASSWORD demo/.env)
+  O primeiro login exige trocar a senha; depois disso a provisória deixa de valer.
 
-Se o banco estiver vazio, carregue as 6 pautas de exemplo:
+Usuários de exemplo (depois de \`npm run demo:seed\`), senha ${SEED_PASSWORD}
+(senha pública de desenvolvimento, só para esta demonstração local):
+  dev.admin@pauta.local   dev.editor@pauta.local   dev.leitor@pauta.local
+
+Se o banco estiver sem pautas, carregue as 6 de exemplo:
   npm run demo:seed
 `);
 }

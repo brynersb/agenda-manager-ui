@@ -12,30 +12,37 @@ dono. Os dados são de teste: pode criar, mudar e apagar à vontade.
 Quem está com a máquina faz isto uma vez:
 
 1. Abra o **Docker Desktop** e espere ele ficar pronto.
-2. Feche o que estiver usando as portas 5173, 8081 e 3001 (se houver um
+2. Feche o que estiver usando as portas 5173 e 3001 (se houver um
    `npm run dev` rodando, pare-o).
 3. Abra o terminal na pasta `pauta-mkt-ui` e rode:
    ```bash
    npm run demo:up
    ```
    Espere a mensagem **"Demonstração no ar"**. A primeira vez demora mais.
-4. Se a lista de pautas estiver vazia, carregue os exemplos (pode rodar mais de
-   uma vez sem duplicar):
+4. Carregue os usuários e as pautas de exemplo (pode rodar mais de uma vez sem
+   duplicar):
    ```bash
    npm run demo:seed
    ```
 5. Abra **http://localhost:5173** no navegador.
 
-Usuários para o roteiro:
+Usuários para o roteiro (e-mail e senha):
 
 | Usuário | Senha | Use em |
 | --- | --- | --- |
-| `dev.editor` (Ana Editora) | `dev` | passos 1, 3 a 9 |
-| `dev.leitor` (Lucas Leitor) | `dev` | passo 2 |
+| `dev.editor@pauta.local` (Dev Editor) | `dev-only-pauta-2026` | passos 1, 3 a 9 |
+| `dev.leitor@pauta.local` (Dev Leitor) | `dev-only-pauta-2026` | passo 2 |
+| `dev.admin@pauta.local` (Dev Admin) | `dev-only-pauta-2026` | passos 12 e 13 |
 
-Se a usuária já tiver um usuário próprio criado no console do Keycloak (ver
-`docs/demo.md`), ela pode usar esse no lugar do `dev.editor`. Nesse caso, no
-passo 1, o nome que aparece no topo é o nome que foi cadastrado.
+Essa senha é pública e só vale nesta máquina de teste. Se a usuária já tiver um
+usuário próprio, criado por um administrador em **Usuários** (ver `docs/demo.md`),
+ela pode usar esse no lugar do `dev.editor`; o passo 12 mostra como criar. Nesse
+caso, no passo 1, o nome que aparece no topo é o nome que foi cadastrado.
+
+**Primeiro acesso do administrador** (quem está com a máquina, uma vez): entre com
+`admin@pauta.local` e a senha provisória que está no arquivo `demo/.env`
+(`grep BOOTSTRAP_ADMIN_PASSWORD demo/.env`). O sistema pede uma nova senha antes
+de qualquer coisa; defina e guarde-a. A senha do arquivo deixa de valer.
 
 Para os passos 7 e 11, é preciso uma segunda janela: outro navegador ou uma
 janela anônima.
@@ -49,14 +56,14 @@ descrito, ou **Problema** e uma frase do que foi diferente.
 
 | Passo | O que fazer | O que deve acontecer | OK / Problema |
 | --- | --- | --- | --- |
-| 1 | Entre com `dev.editor` / `dev`. Veja o topo da tela. | Aparecem a data de hoje e o nome "Ana Editora" (ou o nome do usuário próprio). A lista de pautas carrega. | |
+| 1 | Entre com `dev.editor@pauta.local` e a senha de desenvolvimento. Veja o topo da tela. | Aparecem a data de hoje e o nome "Dev Editor" (ou o nome do usuário próprio). A lista de pautas carrega. | |
 | 1b | Abra o menu do usuário (no canto) e clique em **Sair**, depois confirme. | Volta para a tela de login. Entrar de novo com o mesmo usuário funciona. | |
 
 ### Permissões: o leitor
 
 | Passo | O que fazer | O que deve acontecer | OK / Problema |
 | --- | --- | --- | --- |
-| 2 | Saia e entre com `dev.leitor` / `dev`. Olhe a tela inteira. | Não aparece o botão **+ Nova pauta**. Não aparece o botão **Editar empreendimentos e responsáveis**. Abrindo uma pauta, ela aparece só para ler: não há botão **Salvar**, e o campo de status fica desabilitado (não dá para trocar). |  |
+| 2 | Saia e entre com `dev.leitor@pauta.local`. Olhe a tela inteira e abra o menu do usuário. | Não aparece o botão **+ Nova pauta**. Não aparece o botão **Editar empreendimentos e responsáveis**. O menu não tem **Usuários**. Abrindo uma pauta, ela aparece só para ler: não há botão **Salvar**, e o campo de status fica desabilitado (não dá para trocar). |  |
 
 ### Criar pauta
 
@@ -112,7 +119,7 @@ descrito, ou **Problema** e uma frase do que foi diferente.
 
 | Passo | O que fazer | O que deve acontecer | OK / Problema |
 | --- | --- | --- | --- |
-| 10 | No terminal, na pasta `pauta-mkt-ui`, rode `npm run demo:down`. Espere terminar. Depois rode `npm run demo:up`. Abra **http://localhost:5173**. | Todas as pautas, empreendimentos e responsáveis continuam lá. Pode ser preciso entrar de novo. Os usuários continuam existindo. |  |
+| 10 | No terminal, na pasta `pauta-mkt-ui`, rode `npm run demo:down`. Espere terminar. Depois rode `npm run demo:up`. Abra **http://localhost:5173**. | Todas as pautas, empreendimentos e responsáveis continuam lá. Os usuários (inclusive os criados no passo 12) continuam existindo e com as mesmas senhas. |  |
 
 ### Celular
 
@@ -120,12 +127,35 @@ descrito, ou **Problema** e uma frase do que foi diferente.
 | --- | --- | --- | --- |
 | 11 | Na segunda janela (ou no navegador com as ferramentas de desenvolvedor), deixe a largura da tela em cerca de **375 pixels** (tamanho de celular). Role a lista e abra uma pauta. | Não aparece barra de rolagem para os lados. Os textos e botões cabem na tela. O painel da pauta pode ser usado normalmente. |  |
 
+### Aparência
+
+| Passo | O que fazer | O que deve acontecer | OK / Problema |
+| --- | --- | --- | --- |
+| 11b | Como editora, abra o menu do usuário e troque **Aparência** entre **Suave** e **Clássica**. Depois troque **Formulários** entre **Modal** e **Painel lateral** e abra uma pauta em cada um. | A tela muda de visual na hora e a pauta abre no formato escolhido (janela central ou painel lateral). Ao recarregar a página a escolha continua. |  |
+
+### Administração de usuários
+
+Use a janela do administrador (`dev.admin@pauta.local`).
+
+| Passo | O que fazer | O que deve acontecer | OK / Problema |
+| --- | --- | --- | --- |
+| 12 | No menu do usuário, abra **Usuários**. Clique em **+ Novo usuário**, preencha nome e e-mail (por exemplo `maria.teste@pauta.local`), escolha o papel **Editor** e deixe a senha em branco. Clique em **Criar usuário**. | Aparece **Usuário criado** com uma senha provisória e o aviso de que ela não será mostrada de novo. Copie-a (botão **Copiar senha**) e clique em **Concluir**. O usuário entra na lista. |  |
+| 12b | Em outra janela (anônima), entre com o usuário novo e a senha provisória. | O sistema pede para definir uma senha nova antes de mostrar as pautas. Depois da troca, a pessoa entra normalmente (como Editor). |  |
+| 13 | Volte à janela do administrador. No menu **Ações** do usuário novo, escolha **Redefinir senha** e confirme. Depois **Desativar** o mesmo usuário e confirme. | Redefinir mostra outra senha provisória, uma única vez. Desativado, o usuário aparece como **Desativado** e não consegue mais entrar (mensagem de conta desativada). **Reativar** devolve o acesso. |  |
+| 13b | Tente desativar ou mudar o papel do próprio administrador, ou do único administrador. | A tela não oferece a ação para a própria pessoa, ou mostra o aviso da regra (sempre precisa existir um administrador ativo). |  |
+
 ## Diferenças em relação ao protótipo
 
 Estas mudanças são intencionais. Confira se fazem sentido para o uso:
 
-- **Login:** é preciso entrar com usuário e senha. Quem não tem permissão vê uma
-  tela de "sem permissão".
+- **Login:** é preciso entrar com e-mail e senha. Quem recebe uma senha
+  provisória precisa trocá-la no primeiro acesso. Quem não tem permissão vê uma
+  tela de "sem permissão". Quem esquece a senha pede a um administrador a
+  redefinição (não há recuperação por e-mail).
+- **Usuários:** os administradores criam, editam, desativam e redefinem usuários
+  pela tela **Usuários**.
+- **Aparência:** há duas aparências (Suave e Clássica) e dois formatos de
+  formulário (janela central ou painel lateral), à escolha de cada pessoa.
 - **Dados no servidor:** as pautas ficam guardadas no banco de dados, não no
   navegador. Fechar o navegador ou abrir outra janela não apaga nada.
 - **Arquivar em vez de remover:** um empreendimento ou responsável arquivado some

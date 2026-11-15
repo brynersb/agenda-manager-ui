@@ -14,7 +14,11 @@ RUN npm ci --ignore-scripts
 COPY . .
 
 ARG VITE_API_BASE_URL
-ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+ARG VITE_UI_THEME
+ARG VITE_FORM_PRESENTATION
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL \
+    VITE_UI_THEME=$VITE_UI_THEME \
+    VITE_FORM_PRESENTATION=$VITE_FORM_PRESENTATION
 
 RUN npm run build
 
@@ -25,9 +29,9 @@ FROM nginx:alpine AS production
 # Só as variáveis de ambiente definidas são trocadas; `$uri` e afins ficam.
 COPY nginx.conf /etc/nginx/templates/default.conf.template
 
-# Origens extras liberadas no `connect-src` da CSP (a API e o Keycloak).
-# O compose da demonstração sobrescreve este valor.
-ENV CSP_CONNECT_SRC="http://localhost:3001 http://localhost:8081"
+# Origens extras liberadas no `connect-src` da CSP (a API, que o navegador
+# chama direto). O compose da demonstração sobrescreve este valor.
+ENV CSP_CONNECT_SRC="http://localhost:3001"
 
 COPY --from=build /app/dist /usr/share/nginx/html
 

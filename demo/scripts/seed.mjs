@@ -1,5 +1,6 @@
-// demo:seed — carrega as 6 pautas de exemplo. Idempotente: rodar de novo não
-// duplica nada.
+// demo:seed — cria os usuários de exemplo (dev.admin, dev.editor e dev.leitor,
+// @pauta.local) e as 6 pautas de exemplo. Idempotente: rodar de novo não
+// duplica nada nem altera usuário já existente.
 //
 // Roda o seed JÁ COMPILADO dentro do contêiner da API. O script `seed:dev` da
 // API faz `npm run build` antes e a imagem de produção não tem o Nest CLI; o

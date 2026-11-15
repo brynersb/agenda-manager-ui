@@ -2,8 +2,9 @@
 // `pg_dump` compactado. O pg_dump e o gzip rodam DENTRO do contêiner do
 // Postgres (versão 18), nunca com o cliente da máquina.
 //
-// O backup cobre só o banco da aplicação (pautas e cadastros). Usuários
-// criados pelo console do Keycloak ficam no volume pauta-demo-kcdata.
+// O backup cobre o banco inteiro da aplicação: pautas, cadastros e usuários
+// (com os hashes de senha). Não inclui o `demo/.env` (segredo de assinatura dos
+// tokens): sem ele as sessões abertas caem, mas os usuários continuam válidos.
 import { createWriteStream } from 'node:fs';
 import { mkdir, rename, rm, stat } from 'node:fs/promises';
 import path from 'node:path';

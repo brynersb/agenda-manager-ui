@@ -195,12 +195,19 @@ Acessível pelo menu do usuário, só com `user:read`.
 
 ## Modo demonstração
 
-`npm run demo:up` sobe a stack da demonstração já buildada no Docker (UI em
-`http://localhost:5173`, API em `3001`), com dados em volumes que sobrevivem a
-reinícios. A stack ainda está sendo ajustada à autenticação própria da API
-(ADR-016) em outra etapa, então confira `demo/` antes de depender dela; `demo:backup`, `demo:restore` e `demo:reset` cuidam de
-backup e recomeço. Pare o `npm run dev` antes (a porta 5173 é a mesma). Passo a
-passo, portas, usuários e o que apaga dados: [`docs/demo.md`](docs/demo.md).
+`npm run demo:up` sobe a stack da demonstração já buildada no Docker (Postgres,
+API em `http://localhost:3001` e UI em `http://localhost:5173`), com dados em um
+volume que sobrevive a reinícios. A autenticação é a própria da API (ADR-016):
+na primeira execução o `demo:up` gera o `demo/.env` (fora do git) com um
+`JWT_SECRET` aleatório e a senha provisória do administrador inicial
+`admin@pauta.local`; a senha **não é impressa**, leia com
+`grep BOOTSTRAP_ADMIN_PASSWORD demo/.env`. O primeiro login exige trocar a senha.
+`npm run demo:seed` cria os usuários de exemplo (`dev.admin`, `dev.editor` e
+`dev.leitor`, `@pauta.local`, com a senha pública de desenvolvimento da API) e as
+6 pautas de exemplo. Novos usuários nascem pela tela `/users`. `demo:backup`,
+`demo:restore` e `demo:reset` cuidam de backup e recomeço (os dois últimos pedem
+confirmação). Pare o `npm run dev` antes (a porta 5173 é a mesma). Passo a passo,
+portas, usuários e o que apaga dados: [`docs/demo.md`](docs/demo.md).
 Roteiro para a usuária validar o sistema:
 [`docs/validation-script.md`](docs/validation-script.md). Roteiro de apresentação
 do case (15 a 20 minutos): [`docs/presentation-script.md`](docs/presentation-script.md).
