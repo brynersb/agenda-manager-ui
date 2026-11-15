@@ -1,0 +1,179 @@
+# Stack do modo demonstração local (T14a): Postgres, Keycloak, API e UI já
+# buildados, com dados em volumes nomeados que sobrevivem a reinícios.
+#
+# Use os scripts `npm run demo:*` (eles já passam `-p pauta-demo -f ...`).
+# Direto: docker compose -f demo/compose.demo.yaml up -d --build --wait
+#
+# Portas no host (coexiste com a stack de desenvolvimento, que usa 5433, 8080
+# e 3000):
+#   UI 5173 | Keycloak 8081 | API 3001 | Postgres: não publicado (backup e
+#   restore por `docker compose exec`).
+# A UI precisa ficar na 5173 porque o realm `bora` só libera essa origem.
+# Pare o `npm run dev` antes de subir a demonstração.
+#
+# SOMENTE USO LOCAL: senhas fixas (postgres pauta/pauta, Keycloak admin/admin,
+# usuários dev.* com senha `dev`) e Keycloak em `start-dev`.
+name: pauta-demo
+
+x-api-dir: &api-dir ${PAUTA_API_DIR:-../../pauta-mkt-api}
+
+# Ambiente comum da API e do job de migration.
+x-api-environment: &api-environment
+  NODE_ENV: production
+  STAGE: demo
+  PORT: "3000"
+  # Postgres da própria stack (rede interna do compose; TLS desligado).
+  DATABASE_HOST: postgres
+  DATABASE_PORT: "5432"
+  DATABASE_USER: pauta
+  DATABASE_PASS: pauta
+  DATABASE_NAME: pauta
+  DATABASE_SSL: "false"
+  # Trava da API: o usuário mock nunca vale fora de STAGE=local.
+  AUTH_MOCK_ENABLED: "false"
+  CORS_ORIGINS: http://localhost:5173
+  SWAGGER_ENABLED: "true"
+  # Issuer interno x externo (ponto mais perigoso desta stack):
+  #  - O navegador acessa o Keycloak em http://localhost:8081, e é nesse
+  #    endereço que o token é emitido: `iss` = http://localhost:8081/realms/bora.
+  #  - A API, dentro da rede do compose, só alcança o Keycloak em
+  #    http://keycloak:8080 (para ela, `localhost` é o próprio contêiner).
+  #  - Solução: o Keycloak fixa o hostname externo (KC_HOSTNAME, ver abaixo), então
+  #    o `iss` é sempre o externo; a API valida `iss` contra o endereço externo
+  #    (OIDC_ISSUER_URL) mas baixa as chaves públicas pelo interno
+  #    (OIDC_JWKS_URI). Sem OIDC_JWKS_URI a API tentaria
+  #    http://localhost:8081 de dentro do contêiner e falharia em tudo (401).
+  OIDC_ISSUER_URL: http://localhost:8081/realms/bora
+  OIDC_JWKS_URI: http://keycloak:8080/realms/bora/protocol/openid-connect/certs
+  OIDC_AUDIENCE: pauta-mkt-api
+  OIDC_ROLES_CLAIM: realm_access.roles
+
+# O job de migration e a API usam a mesma imagem.
+x-api-build: &api-build
+  context: *api-dir
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: pauta
+      POSTGRES_USER: pauta
+      # Credencial só para uso local; a porta não é publicada no host.
+      POSTGRES_PASSWORD: pauta
+    volumes:
+      # Postgres 18+ guarda os dados num subdiretório versionado de /var/lib/postgresql.
+      - pauta-demo-pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pauta -d pauta"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  keycloak:
+    # Mesma imagem e tag do docker/compose.yaml da API.
+    image: quay.io/keycloak/keycloak:26.8.2
+    command: start-dev --import-realm
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HEALTH_ENABLED: "true"
+      # Hostname externo: todo `iss`, página de login e link devolvido ao
+      # navegador usa este endereço, não importa por onde o Keycloak foi chamado.
+      KC_HOSTNAME: http://localhost:8081
+      # Chamadas feitas a partir da rede interna (http://keycloak:8080, como o
+      # discovery) recebem URLs de back-channel pelo host da própria chamada.
+      # O `iss` continua o externo. Exige KC_HOSTNAME com URL completa.
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+    ports:
+      - "8081:8080"
+    volumes:
+      # A importação só acontece se o realm ainda não existir no volume:
+      # mudanças no realm-bora.json só valem depois de `npm run demo:reset`.
+      - ${PAUTA_API_DIR:-../../pauta-mkt-api}/docker/keycloak/realm-bora.json:/opt/keycloak/data/import/realm-bora.json:ro
+      - pauta-demo-kcdata:/opt/keycloak/data
+    healthcheck:
+      # A imagem não tem curl; o /health/ready fica na porta de gerenciamento (9000).
+      test:
+        - CMD-SHELL
+        - >-
+          exec 3<>/dev/tcp/localhost/9000 &&
+          printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
+          grep -q '"status": "UP"' <&3
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 40s
+
+  api-migrate:
+    # Job de uma execução: aplica as migrations e sai (código 0).
+    build: *api-build
+    image: pauta-demo-api:local
+    command: ["npm", "run", "migration:run:prod"]
+    environment: *api-environment
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build: *api-build
+    image: pauta-demo-api:local
+    environment: *api-environment
+    ports:
+      - "3001:3000"
+    depends_on:
+      api-migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "require('http').get('http://127.0.0.1:3000/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    restart: unless-stopped
+
+  ui:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        # As VITE_* são gravadas no bundle: valem para o navegador, por isso
+        # apontam para as portas publicadas no host, não para a rede interna.
+        VITE_OIDC_AUTHORITY: http://localhost:8081/realms/bora
+        VITE_OIDC_CLIENT_ID: pauta-mkt-ui
+        VITE_OIDC_REDIRECT_URI: http://localhost:5173/auth/callback
+        VITE_OIDC_POST_LOGOUT_REDIRECT_URI: http://localhost:5173/login
+        VITE_OIDC_SCOPE: openid profile email
+        VITE_API_BASE_URL: http://localhost:3001/api/v1/
+    image: pauta-demo-ui:local
+    environment:
+      # Origens liberadas no `connect-src` da CSP: a API e o Keycloak.
+      CSP_CONNECT_SRC: http://localhost:3001 http://localhost:8081
+    ports:
+      - "5173:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+
+volumes:
+  # Nomes fixos (sem o prefixo do projeto): `docker volume ls` mostra
+  # exatamente `pauta-demo-pgdata` e `pauta-demo-kcdata`.
+  pauta-demo-pgdata:
+    name: pauta-demo-pgdata
+  pauta-demo-kcdata:
+    name: pauta-demo-kcdata

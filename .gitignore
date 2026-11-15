@@ -1,0 +1,23 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+.env
+.claude
+.docs
+
+# Testes
+coverage
+
+# Editor
+.vscode/*
+.idea
+.DS_Store
+
+# Modo demonstração: dumps do banco (dados reais da POC)
+demo/backups/

@@ -1,0 +1,17 @@
+node_modules
+dist
+dist-ssr
+coverage
+*.log
+.env
+.env.*
+.claude
+.docs
+.vscode
+.idea
+.DS_Store
+Dockerfile
+.dockerignore
+# A pasta demo (compose, scripts e backups) não participa do build da UI;
+# isso inclui demo/backups, que guarda dumps do banco.
+demo
